@@ -58,7 +58,7 @@
           default = pkgs.mkShell {
             name = "webidl-dev-shell";
             packages = with pkgs; [
-              zig
+              zig_0_17
               nodejs
             ];
           };
@@ -77,7 +77,7 @@
             src = lib.cleanSource ./.;
 
             nativeBuildInputs = with pkgs; [
-              zig
+              zig_0_17
             ];
 
             doCheck = true;

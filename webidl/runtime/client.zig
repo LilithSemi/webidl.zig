@@ -231,7 +231,7 @@ pub fn freeStr(s: []const u8) void {
 /// The view is only valid while the call that receives it is running. JS must
 /// not keep it, and this side must not grow the heap underneath it.
 pub fn fromBuf(comptime T: type, buf: []T, kind: BufferKind) Handle {
-    return __webidl_buf_to_handle(@ptrCast(buf.ptr), buf.len, @intFromEnum(kind));
+    return __webidl_buf_to_handle(@ptrCast(buf.ptr), buf.len, @backingInt(kind));
 }
 
 /// Fetch a JS buffer as an OWNED Zig slice. The host copies the bytes into wasm
@@ -341,10 +341,10 @@ test "the buffer kind numbering is the ABI and does not drift" {
     // BUFFER_VIEW_CTORS on the JS side is indexed by these numbers. A reorder
     // here silently hands JS the wrong constructor, which is a wrong ANSWER
     // rather than a crash: bytes read as the wrong element type.
-    try std.testing.expectEqual(@as(u32, 0), @intFromEnum(BufferKind.array_buffer));
-    try std.testing.expectEqual(@as(u32, 6), @intFromEnum(BufferKind.uint8_array));
-    try std.testing.expectEqual(@as(u32, 14), @intFromEnum(BufferKind.float64_array));
-    try std.testing.expectEqual(15, @typeInfo(BufferKind).@"enum".fields.len);
+    try std.testing.expectEqual(@as(u32, 0), @backingInt(BufferKind.array_buffer));
+    try std.testing.expectEqual(@as(u32, 6), @backingInt(BufferKind.uint8_array));
+    try std.testing.expectEqual(@as(u32, 14), @backingInt(BufferKind.float64_array));
+    try std.testing.expectEqual(15, @typeInfo(BufferKind).@"enum".field_names.len);
 }
 
 test "webidl_rt_alloc(0) returns null" {

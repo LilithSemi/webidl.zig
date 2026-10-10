@@ -217,14 +217,19 @@ fn emitStyle(gpa: std.mem.Allocator, style: Style, w: *std.Io.Writer, defs: mode
     }
     const raw = buf.writer.buffered();
 
-    const src0 = try gpa.dupeZ(u8, raw);
+    const src0 = try gpa.dupeSentinel(u8, raw, 0);
     defer gpa.free(src0);
-    var ast = try std.zig.Ast.parse(gpa, src0, .zig);
+
+    var ast = try std.zig.Ast.parse(gpa, src0, .{
+        .mode = .zig,
+    });
     defer ast.deinit(gpa);
+
     if (ast.errors.len > 0) {
         try w.writeAll(raw);
         return;
     }
+
     const formatted = try ast.renderAlloc(gpa);
     defer gpa.free(formatted);
     try w.writeAll(formatted);
