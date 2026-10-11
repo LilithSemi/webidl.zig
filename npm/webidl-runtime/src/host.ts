@@ -135,7 +135,8 @@ export function createHost(): Host {
           }
         },
 
-        // Transient primitive/string handles aren't auto-released. Object lifetimes rely on retain/release.
+        // The host does not release transient primitive and string handles. The
+        // generated wrappers release them after each call.
         __webidl_str_to_handle(ptr: number, len: number): number {
           return internValue(readString(ptr, len));
         },

@@ -17,6 +17,10 @@
 //! String ownership: getters and operations that return `[]const u8` hand back
 //! OWNED memory allocated by the JS host via `webidl_rt_alloc`. Callers must
 //! free the slice with `webidl.rt.freeStr` when done.
+//!
+//! Handle ownership: a wrapper releases each handle that it makes for an
+//! argument or a primitive result. An interface result is a new handle that
+//! the caller owns and releases with `unref`.
 
 const std = @import("std");
 const model = @import("../model.zig");
@@ -159,17 +163,10 @@ fn emitInterface(w: *std.Io.Writer, gpa: std.mem.Allocator, iface: model.Interfa
             try common.zigArgType(w, gpa, arg);
         }
         try w.print(") {s} {{\n", .{ident});
-        try w.print("        return .{{ .handle = webidl.rt.construct(\"{s}\", &[_]webidl.rt.Handle{{", .{iface.name});
-        first = true;
-        for (ctor.args) |arg| {
-            if (arg.variadic) continue;
-            if (!first) try w.writeAll(", ");
-            first = false;
-            const arg_ident = naming.zigIdent(gpa, arg.name) catch return error.OutOfMemory;
-            defer gpa.free(arg_ident);
-            try emitTypeToHandle(w, gpa, arg.type, arg_ident);
-        }
-        try w.writeAll("}) };\n    }\n");
+        try emitArgHandles(w, gpa, ctor.args);
+        try w.print("        return .{{ .handle = webidl.rt.construct(\"{s}\", ", .{iface.name});
+        try emitArgArray(w, gpa, ctor.args);
+        try w.writeAll(") };\n    }\n");
     }
 
     // Reference counting: retain/release the JS handle in the host table.
@@ -193,9 +190,7 @@ fn emitAttrGetter(
     try common.zigType(w, gpa, attr.type);
     try w.writeAll(" {\n");
     try w.print("        const _h = webidl.rt.getAttr(self.handle, \"{s}\");\n", .{attr.name});
-    try w.writeAll("        return ");
-    try emitHandleToType(w, gpa, attr.type, "_h");
-    try w.writeAll(";\n    }\n");
+    try emitResult(w, gpa, attr.type);
 }
 
 fn emitAttrSetter(
@@ -211,8 +206,9 @@ fn emitAttrSetter(
     try w.print("    pub fn {s}(self: {s}, value: ", .{ setter_ident, iface_ident });
     try common.zigType(w, gpa, attr.type);
     try w.writeAll(") void {\n");
+    try emitValueHandle(w, gpa, attr.type);
     try w.print("        webidl.rt.setAttr(self.handle, \"{s}\", ", .{attr.name});
-    try emitTypeToHandle(w, gpa, attr.type, "value");
+    try emitValueRef(w, gpa, attr.type);
     try w.writeAll(");\n    }\n");
 }
 
@@ -250,35 +246,11 @@ fn emitOperation(
         }
     }
 
-    // Body: inline Handle array, then dispatch via webidl.rt.callMethod
-    const is_void = op.return_type == .undefined;
-
-    if (is_void) {
-        try w.writeAll("        _ = webidl.rt.callMethod(self.handle, \"");
-    } else {
-        try w.writeAll("        const _h = webidl.rt.callMethod(self.handle, \"");
-    }
-    try w.writeAll(op_name);
-    try w.writeAll("\", &[_]webidl.rt.Handle{");
-
-    var first_arg = true;
-    for (op.args) |arg| {
-        if (arg.variadic) continue; // variadic: see comment above
-        if (!first_arg) try w.writeAll(", ");
-        first_arg = false;
-        const arg_ident = naming.zigIdent(gpa, arg.name) catch return error.OutOfMemory;
-        defer gpa.free(arg_ident);
-        try emitTypeToHandle(w, gpa, arg.type, arg_ident);
-    }
-
-    if (is_void) {
-        try w.writeAll("});\n    }\n");
-    } else {
-        try w.writeAll("});\n");
-        try w.writeAll("        return ");
-        try emitHandleToType(w, gpa, op.return_type, "_h");
-        try w.writeAll(";\n    }\n");
-    }
+    try emitArgHandles(w, gpa, op.args);
+    try w.print("        const _h = webidl.rt.callMethod(self.handle, \"{s}\", ", .{op_name});
+    try emitArgArray(w, gpa, op.args);
+    try w.writeAll(");\n");
+    try emitResult(w, gpa, op.return_type);
 }
 
 // Static attribute / operation helpers (interface-level, no instance handle)
@@ -297,9 +269,7 @@ fn emitStaticAttrGetter(
     try common.zigType(w, gpa, attr.type);
     try w.writeAll(" {\n");
     try w.print("        const _h = webidl.rt.getStaticAttr(\"{s}\", \"{s}\");\n", .{ iface_name, attr.name });
-    try w.writeAll("        return ");
-    try emitHandleToType(w, gpa, attr.type, "_h");
-    try w.writeAll(";\n    }\n");
+    try emitResult(w, gpa, attr.type);
 }
 
 fn emitStaticAttrSetter(
@@ -315,8 +285,9 @@ fn emitStaticAttrSetter(
     try w.print("    pub fn {s}(value: ", .{setter_ident});
     try common.zigType(w, gpa, attr.type);
     try w.writeAll(") void {\n");
+    try emitValueHandle(w, gpa, attr.type);
     try w.print("        webidl.rt.setStaticAttr(\"{s}\", \"{s}\", ", .{ iface_name, attr.name });
-    try emitTypeToHandle(w, gpa, attr.type, "value");
+    try emitValueRef(w, gpa, attr.type);
     try w.writeAll(");\n    }\n");
 }
 
@@ -329,7 +300,6 @@ fn emitStaticOperation(
 ) common.Error!void {
     const op_ident = naming.zigIdent(gpa, op_name) catch return error.OutOfMemory;
     defer gpa.free(op_ident);
-    const is_void = op.return_type == .undefined;
     try w.print("    pub fn {s}(", .{op_ident});
     var first = true;
     for (op.args) |arg| {
@@ -352,27 +322,11 @@ fn emitStaticOperation(
             break;
         }
     }
-    if (is_void) {
-        try w.print("        _ = webidl.rt.callStaticMethod(\"{s}\", \"{s}\", &[_]webidl.rt.Handle{{", .{ iface_name, op_name });
-    } else {
-        try w.print("        const _h = webidl.rt.callStaticMethod(\"{s}\", \"{s}\", &[_]webidl.rt.Handle{{", .{ iface_name, op_name });
-    }
-    first = true;
-    for (op.args) |arg| {
-        if (arg.variadic) continue;
-        if (!first) try w.writeAll(", ");
-        first = false;
-        const arg_ident = naming.zigIdent(gpa, arg.name) catch return error.OutOfMemory;
-        defer gpa.free(arg_ident);
-        try emitTypeToHandle(w, gpa, arg.type, arg_ident);
-    }
-    if (is_void) {
-        try w.writeAll("});\n    }\n");
-    } else {
-        try w.writeAll("});\n        return ");
-        try emitHandleToType(w, gpa, op.return_type, "_h");
-        try w.writeAll(";\n    }\n");
-    }
+    try emitArgHandles(w, gpa, op.args);
+    try w.print("        const _h = webidl.rt.callStaticMethod(\"{s}\", \"{s}\", ", .{ iface_name, op_name });
+    try emitArgArray(w, gpa, op.args);
+    try w.writeAll(");\n");
+    try emitResult(w, gpa, op.return_type);
 }
 
 // Namespace (static: operations and attributes emitted via static helpers)
@@ -428,6 +382,78 @@ fn emitNamespace(w: *std.Io.Writer, gpa: std.mem.Allocator, ns: model.Namespace)
     }
 
     try w.writeAll("};\n");
+}
+
+// Handle ownership
+
+/// Return true when the wrapper makes the handle for a value of type `t` and so
+/// must release it. An interface handle belongs to the caller.
+fn wrapperOwns(t: model.Type) bool {
+    return switch (t) {
+        .named => false,
+        .nullable, .promise => |inner| wrapperOwns(inner.*),
+        else => true,
+    };
+}
+
+/// Emit a local for each argument handle the wrapper makes, with a deferred
+/// release so the host table does not grow on each call.
+fn emitArgHandles(w: *std.Io.Writer, gpa: std.mem.Allocator, args: []const model.Argument) common.Error!void {
+    for (args, 0..) |arg, i| {
+        if (arg.variadic) continue;
+        if (!wrapperOwns(arg.type)) continue;
+        const arg_ident = naming.zigIdent(gpa, arg.name) catch return error.OutOfMemory;
+        defer gpa.free(arg_ident);
+        try w.print("        const _a{d} = ", .{i});
+        try emitTypeToHandle(w, gpa, arg.type, arg_ident);
+        try w.print(";\n        defer webidl.rt.release(_a{d});\n", .{i});
+    }
+}
+
+/// Emit the `&[_]webidl.rt.Handle{ ... }` argument array. Variadic arguments
+/// are left out (see the comment the operation emits for them).
+fn emitArgArray(w: *std.Io.Writer, gpa: std.mem.Allocator, args: []const model.Argument) common.Error!void {
+    try w.writeAll("&[_]webidl.rt.Handle{");
+    var first = true;
+    for (args, 0..) |arg, i| {
+        if (arg.variadic) continue;
+        if (!first) try w.writeAll(", ");
+        first = false;
+        if (wrapperOwns(arg.type)) {
+            try w.print("_a{d}", .{i});
+        } else {
+            const arg_ident = naming.zigIdent(gpa, arg.name) catch return error.OutOfMemory;
+            defer gpa.free(arg_ident);
+            try emitTypeToHandle(w, gpa, arg.type, arg_ident);
+        }
+    }
+    try w.writeAll("}");
+}
+
+/// Emit the local for a setter `value` handle when the wrapper makes it.
+fn emitValueHandle(w: *std.Io.Writer, gpa: std.mem.Allocator, t: model.Type) common.Error!void {
+    if (!wrapperOwns(t)) return;
+    try w.writeAll("        const _v = ");
+    try emitTypeToHandle(w, gpa, t, "value");
+    try w.writeAll(";\n        defer webidl.rt.release(_v);\n");
+}
+
+/// Emit the handle expression a setter passes for `value`.
+fn emitValueRef(w: *std.Io.Writer, gpa: std.mem.Allocator, t: model.Type) common.Error!void {
+    if (wrapperOwns(t)) return w.writeAll("_v");
+    try emitTypeToHandle(w, gpa, t, "value");
+}
+
+/// Emit the end of a function body that holds its result handle in `_h`. A
+/// primitive result is released once it is read. An interface result goes to
+/// the caller. A JS function can return a value where the IDL says
+/// `undefined`, so that handle is released too.
+fn emitResult(w: *std.Io.Writer, gpa: std.mem.Allocator, t: model.Type) common.Error!void {
+    if (t == .undefined) return w.writeAll("        webidl.rt.release(_h);\n    }\n");
+    if (wrapperOwns(t)) try w.writeAll("        defer webidl.rt.release(_h);\n");
+    try w.writeAll("        return ");
+    try emitHandleToType(w, gpa, t, "_h");
+    try w.writeAll(";\n    }\n");
 }
 
 // Type-marshaling helpers (emit Zig expressions for the Wasm/JS boundary)
@@ -746,4 +772,33 @@ test "emit: a buffer of a wider element type keeps that element type" {
     const out = aw.writer.buffered();
     try testing.expect(std.mem.indexOf(u8, out, "samples: []f32") != null);
     try testing.expect(std.mem.indexOf(u8, out, "webidl.rt.fromBuf(f32, samples, .float32_array)") != null);
+}
+
+test "emit: a wrapper releases the handles it makes and keeps the caller's" {
+    var args = [_]model.Argument{
+        .{ .name = "child", .type = .{ .named = "Node" }, .optional = false, .variadic = false, .default = null },
+        .{ .name = "label", .type = .dom_string, .optional = false, .variadic = false, .default = null },
+    };
+    var ops = [_]model.Operation{
+        .{ .name = "insert", .return_type = .{ .named = "Node" }, .args = &args, .special = null, .is_static = false, .stringifier = false },
+        .{ .name = "measure", .return_type = .double, .args = &.{}, .special = null, .is_static = false, .stringifier = false },
+    };
+    const iface = model.Interface{
+        .name = "Node",
+        .inherits = null,
+        .constants = &.{},
+        .attributes = &.{},
+        .operations = &ops,
+        .constructors = &.{},
+        .mixin = false,
+    };
+    var aw: std.Io.Writer.Allocating = .init(testing.allocator);
+    defer aw.deinit();
+    try emitInterface(&aw.writer, testing.allocator, iface);
+    const out = aw.writer.buffered();
+    try testing.expect(std.mem.indexOf(u8, out, "const _a1 = webidl.rt.fromStr(label);\n        defer webidl.rt.release(_a1);") != null);
+    try testing.expect(std.mem.indexOf(u8, out, "Handle{child.handle, _a1}") != null);
+    try testing.expect(std.mem.indexOf(u8, out, "release(child.handle)") == null);
+    try testing.expect(std.mem.indexOf(u8, out, "defer webidl.rt.release(_h);\n        return webidl.rt.toF64(_h);") != null);
+    try testing.expect(std.mem.indexOf(u8, out, "defer webidl.rt.release(_h);\n        return Node{") == null);
 }

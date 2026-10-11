@@ -269,8 +269,10 @@ pub fn retain(h: Handle) void {
 }
 
 /// Decrement the host-side reference count for a handle. When it reaches zero
-/// the host drops the handle from its table, freeing the slot.
+/// the host drops the handle from its table, freeing the slot. The null handle
+/// is not in the table, so releasing it does not call the host.
 pub fn release(h: Handle) void {
+    if (h == 0) return;
     __webidl_release(h);
 }
 

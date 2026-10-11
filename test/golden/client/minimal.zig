@@ -18,10 +18,14 @@ pub const EventTarget = struct {
     pub const CONNECTING: u16 = 0;
     pub fn get_url(self: EventTarget) []const u8 {
         const _h = webidl.rt.getAttr(self.handle, "url");
+        defer webidl.rt.release(_h);
         return webidl.rt.toStr(_h);
     }
     pub fn addEventListener(self: EventTarget, @"type": []const u8) void {
-        _ = webidl.rt.callMethod(self.handle, "addEventListener", &[_]webidl.rt.Handle{webidl.rt.fromStr(@"type")});
+        const _a0 = webidl.rt.fromStr(@"type");
+        defer webidl.rt.release(_a0);
+        const _h = webidl.rt.callMethod(self.handle, "addEventListener", &[_]webidl.rt.Handle{_a0});
+        webidl.rt.release(_h);
     }
     pub fn ref(self: EventTarget) void {
         webidl.rt.retain(self.handle);

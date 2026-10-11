@@ -2,18 +2,108 @@
 
 const webidl = @import("webidl");
 
+pub const Counter = struct {
+    handle: webidl.rt.Handle,
+    pub fn get_total() i32 {
+        const _h = webidl.rt.getStaticAttr("Counter", "total");
+        defer webidl.rt.release(_h);
+        return webidl.rt.toI32(_h);
+    }
+    pub fn set_total(value: i32) void {
+        const _v = webidl.rt.fromI32(value);
+        defer webidl.rt.release(_v);
+        webidl.rt.setStaticAttr("Counter", "total", _v);
+    }
+    pub fn scale(v: f64) f64 {
+        const _a0 = webidl.rt.fromF64(v);
+        defer webidl.rt.release(_a0);
+        const _h = webidl.rt.callStaticMethod("Counter", "scale", &[_]webidl.rt.Handle{_a0});
+        defer webidl.rt.release(_h);
+        return webidl.rt.toF64(_h);
+    }
+    pub fn init(label: []const u8, start: i32) Counter {
+        const _a0 = webidl.rt.fromStr(label);
+        defer webidl.rt.release(_a0);
+        const _a1 = webidl.rt.fromI32(start);
+        defer webidl.rt.release(_a1);
+        return .{ .handle = webidl.rt.construct("Counter", &[_]webidl.rt.Handle{ _a0, _a1 }) };
+    }
+    pub fn ref(self: Counter) void {
+        webidl.rt.retain(self.handle);
+    }
+    pub fn unref(self: Counter) void {
+        webidl.rt.release(self.handle);
+    }
+};
+
 pub const Element = struct {
     handle: webidl.rt.Handle,
+    pub fn get_isConnected(self: Element) bool {
+        const _h = webidl.rt.getAttr(self.handle, "isConnected");
+        defer webidl.rt.release(_h);
+        return webidl.rt.toBool(_h);
+    }
+    pub fn get_scrollTop(self: Element) f64 {
+        const _h = webidl.rt.getAttr(self.handle, "scrollTop");
+        defer webidl.rt.release(_h);
+        return webidl.rt.toF64(_h);
+    }
+    pub fn set_scrollTop(self: Element, value: f64) void {
+        const _v = webidl.rt.fromF64(value);
+        defer webidl.rt.release(_v);
+        webidl.rt.setAttr(self.handle, "scrollTop", _v);
+    }
     pub fn get_textContent(self: Element) []const u8 {
         const _h = webidl.rt.getAttr(self.handle, "textContent");
+        defer webidl.rt.release(_h);
         return webidl.rt.toStr(_h);
     }
     pub fn set_textContent(self: Element, value: []const u8) void {
-        webidl.rt.setAttr(self.handle, "textContent", webidl.rt.fromStr(value));
+        const _v = webidl.rt.fromStr(value);
+        defer webidl.rt.release(_v);
+        webidl.rt.setAttr(self.handle, "textContent", _v);
     }
     pub fn appendChild(self: Element, child: Element) Element {
         const _h = webidl.rt.callMethod(self.handle, "appendChild", &[_]webidl.rt.Handle{child.handle});
         return Element{ .handle = _h };
+    }
+    pub fn fill(self: Element, data: []u8) void {
+        const _a0 = webidl.rt.fromBuf(u8, data, .uint8_array);
+        defer webidl.rt.release(_a0);
+        const _h = webidl.rt.callMethod(self.handle, "fill", &[_]webidl.rt.Handle{_a0});
+        webidl.rt.release(_h);
+    }
+    pub fn getAttribute(self: Element, name: []const u8) ?[]const u8 {
+        const _a0 = webidl.rt.fromStr(name);
+        defer webidl.rt.release(_a0);
+        const _h = webidl.rt.callMethod(self.handle, "getAttribute", &[_]webidl.rt.Handle{_a0});
+        defer webidl.rt.release(_h);
+        return if (_h != 0) webidl.rt.toStr(_h) else null;
+    }
+    pub fn scrollTo(self: Element, x: ?f64, y: f64) void {
+        const _a0 = if (x) |__v| webidl.rt.fromF64(__v) else webidl.rt.nullHandle();
+        defer webidl.rt.release(_a0);
+        const _a1 = webidl.rt.fromF64(y);
+        defer webidl.rt.release(_a1);
+        const _h = webidl.rt.callMethod(self.handle, "scrollTo", &[_]webidl.rt.Handle{ _a0, _a1 });
+        webidl.rt.release(_h);
+    }
+    pub fn setAttribute(self: Element, name: []const u8, value: []const u8) void {
+        const _a0 = webidl.rt.fromStr(name);
+        defer webidl.rt.release(_a0);
+        const _a1 = webidl.rt.fromStr(value);
+        defer webidl.rt.release(_a1);
+        const _h = webidl.rt.callMethod(self.handle, "setAttribute", &[_]webidl.rt.Handle{ _a0, _a1 });
+        webidl.rt.release(_h);
+    }
+    pub fn toggleAttribute(self: Element, name: []const u8, force: bool) bool {
+        const _a0 = webidl.rt.fromStr(name);
+        defer webidl.rt.release(_a0);
+        const _a1 = webidl.rt.fromBool(force);
+        defer webidl.rt.release(_a1);
+        const _h = webidl.rt.callMethod(self.handle, "toggleAttribute", &[_]webidl.rt.Handle{ _a0, _a1 });
+        defer webidl.rt.release(_h);
+        return webidl.rt.toBool(_h);
     }
     pub fn ref(self: Element) void {
         webidl.rt.retain(self.handle);

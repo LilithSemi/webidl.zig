@@ -11,10 +11,13 @@ pub const WithBigint = struct {
     handle: webidl.rt.Handle,
     pub fn get_bigNum(self: WithBigint) i128 {
         const _h = webidl.rt.getAttr(self.handle, "bigNum");
+        defer webidl.rt.release(_h);
         return @as(i128, webidl.rt.toI64(_h));
     }
     pub fn set_bigNum(self: WithBigint, value: i128) void {
-        webidl.rt.setAttr(self.handle, "bigNum", webidl.rt.fromI64(@intCast(value)));
+        const _v = webidl.rt.fromI64(@intCast(value));
+        defer webidl.rt.release(_v);
+        webidl.rt.setAttr(self.handle, "bigNum", _v);
     }
     pub fn ref(self: WithBigint) void {
         webidl.rt.retain(self.handle);
@@ -27,10 +30,15 @@ pub const WithBigint = struct {
 pub const WithConstructor = struct {
     handle: webidl.rt.Handle,
     pub fn doThing(self: WithConstructor) void {
-        _ = webidl.rt.callMethod(self.handle, "doThing", &[_]webidl.rt.Handle{});
+        const _h = webidl.rt.callMethod(self.handle, "doThing", &[_]webidl.rt.Handle{});
+        webidl.rt.release(_h);
     }
     pub fn init(x: i32, y: i32) WithConstructor {
-        return .{ .handle = webidl.rt.construct("WithConstructor", &[_]webidl.rt.Handle{ webidl.rt.fromI32(x), webidl.rt.fromI32(y) }) };
+        const _a0 = webidl.rt.fromI32(x);
+        defer webidl.rt.release(_a0);
+        const _a1 = webidl.rt.fromI32(y);
+        defer webidl.rt.release(_a1);
+        return .{ .handle = webidl.rt.construct("WithConstructor", &[_]webidl.rt.Handle{ _a0, _a1 }) };
     }
     pub fn ref(self: WithConstructor) void {
         webidl.rt.retain(self.handle);
@@ -43,7 +51,10 @@ pub const WithConstructor = struct {
 pub const WithGetter = struct {
     handle: webidl.rt.Handle,
     pub fn indexedGetter(self: WithGetter, index: u32) []const u8 {
-        const _h = webidl.rt.callMethod(self.handle, "indexedGetter", &[_]webidl.rt.Handle{webidl.rt.fromU32(index)});
+        const _a0 = webidl.rt.fromU32(index);
+        defer webidl.rt.release(_a0);
+        const _h = webidl.rt.callMethod(self.handle, "indexedGetter", &[_]webidl.rt.Handle{_a0});
+        defer webidl.rt.release(_h);
         return webidl.rt.toStr(_h);
     }
     pub fn ref(self: WithGetter) void {
@@ -57,7 +68,10 @@ pub const WithGetter = struct {
 pub const WithNullable = struct {
     handle: webidl.rt.Handle,
     pub fn takeNullable(self: WithNullable, x: ?i32) void {
-        _ = webidl.rt.callMethod(self.handle, "takeNullable", &[_]webidl.rt.Handle{if (x) |__v| webidl.rt.fromI32(__v) else webidl.rt.nullHandle()});
+        const _a0 = if (x) |__v| webidl.rt.fromI32(__v) else webidl.rt.nullHandle();
+        defer webidl.rt.release(_a0);
+        const _h = webidl.rt.callMethod(self.handle, "takeNullable", &[_]webidl.rt.Handle{_a0});
+        webidl.rt.release(_h);
     }
     pub fn ref(self: WithNullable) void {
         webidl.rt.retain(self.handle);
@@ -71,6 +85,7 @@ pub const WithPromise = struct {
     handle: webidl.rt.Handle,
     pub fn doAsync(self: WithPromise) i32 {
         const _h = webidl.rt.callMethod(self.handle, "doAsync", &[_]webidl.rt.Handle{});
+        defer webidl.rt.release(_h);
         return webidl.rt.toI32(_h);
     }
     pub fn ref(self: WithPromise) void {
@@ -85,10 +100,14 @@ pub const WithStatic = struct {
     handle: webidl.rt.Handle,
     pub fn get_staticVal() i32 {
         const _h = webidl.rt.getStaticAttr("WithStatic", "staticVal");
+        defer webidl.rt.release(_h);
         return webidl.rt.toI32(_h);
     }
     pub fn staticOp(x: i32) void {
-        _ = webidl.rt.callStaticMethod("WithStatic", "staticOp", &[_]webidl.rt.Handle{webidl.rt.fromI32(x)});
+        const _a0 = webidl.rt.fromI32(x);
+        defer webidl.rt.release(_a0);
+        const _h = webidl.rt.callStaticMethod("WithStatic", "staticOp", &[_]webidl.rt.Handle{_a0});
+        webidl.rt.release(_h);
     }
     pub fn ref(self: WithStatic) void {
         webidl.rt.retain(self.handle);
@@ -102,10 +121,13 @@ pub const WithType = struct {
     handle: webidl.rt.Handle,
     pub fn get_type(self: WithType) []const u8 {
         const _h = webidl.rt.getAttr(self.handle, "type");
+        defer webidl.rt.release(_h);
         return webidl.rt.toStr(_h);
     }
     pub fn set_type(self: WithType, value: []const u8) void {
-        webidl.rt.setAttr(self.handle, "type", webidl.rt.fromStr(value));
+        const _v = webidl.rt.fromStr(value);
+        defer webidl.rt.release(_v);
+        webidl.rt.setAttr(self.handle, "type", _v);
     }
     pub fn ref(self: WithType) void {
         webidl.rt.retain(self.handle);
@@ -120,7 +142,8 @@ pub const WithVariadic = struct {
     pub fn takeVariadic(self: WithVariadic, xs: []const i32) void {
         // variadic arg 'xs': custom JS marshaling needed
         _ = xs;
-        _ = webidl.rt.callMethod(self.handle, "takeVariadic", &[_]webidl.rt.Handle{});
+        const _h = webidl.rt.callMethod(self.handle, "takeVariadic", &[_]webidl.rt.Handle{});
+        webidl.rt.release(_h);
     }
     pub fn ref(self: WithVariadic) void {
         webidl.rt.retain(self.handle);
@@ -132,7 +155,10 @@ pub const WithVariadic = struct {
 
 pub const MathNS = struct {
     pub fn sqrt(x: f64) f64 {
-        const _h = webidl.rt.callStaticMethod("MathNS", "sqrt", &[_]webidl.rt.Handle{webidl.rt.fromF64(x)});
+        const _a0 = webidl.rt.fromF64(x);
+        defer webidl.rt.release(_a0);
+        const _h = webidl.rt.callStaticMethod("MathNS", "sqrt", &[_]webidl.rt.Handle{_a0});
+        defer webidl.rt.release(_h);
         return webidl.rt.toF64(_h);
     }
 };
